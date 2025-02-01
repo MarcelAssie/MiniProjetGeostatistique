@@ -2,7 +2,7 @@
 import numpy as np
 # Matplotlib / plot
 import matplotlib.pyplot as plt
-    
+
 from matplotlib import cm
 from scipy.spatial import Delaunay as delaunay
 import sympy as sp
@@ -41,45 +41,65 @@ def interp_lin(x_obs, y_obs, z_obs, x_int, y_int):
             # on récupère les numéros des sommets du triangle contenant le point (x0,y0)
             idx_s = tri.simplices[idx_t, :]
             # x_obs, y_obs sont des tableaux à 2 dimensions ; il faut les préciser pour en extraire un scalaire
-            x1 = x_obs[idx_s[0], 0]
-            y1 = y_obs[idx_s[0], 0]
-            z1 = z_obs[idx_s[0], 0]
-            x2 = x_obs[idx_s[1], 0]
-            y2 = y_obs[idx_s[1], 0]
-            z2 = z_obs[idx_s[1], 0]
-            x3 = x_obs[idx_s[2], 0]
-            y3 = y_obs[idx_s[2], 0]
-            z3 = z_obs[idx_s[2], 0]
-            mat_B = np.transpose(np.array([z1, z2, z3]))
-            mat_A = np.zeros((3, 3))
-            mat_A[:, 0] = [x1, x2, x3]
-            mat_A[:, 1] = [y1, y2, y3]
-            mat_A[:, 2] = [1, 1, 1]
-            mat_C = np.dot(np.linalg.inv(mat_A), mat_B)
-            #
-            z_int[i, j] = np.dot(mat_C, np.array([x_int[i,j], y_int[i,j], 1]))
+            x1, y1, z1 = x_obs[idx_s[0]].item(), y_obs[idx_s[0]].item(), z_obs[idx_s[0]].item()
+            x2, y2, z2 = x_obs[idx_s[1]].item(), y_obs[idx_s[1]].item(), z_obs[idx_s[1]].item()
+            x3, y3, z3 = x_obs[idx_s[2]].item(), y_obs[idx_s[2]].item(), z_obs[idx_s[2]].item()
+            mat_A = np.array([[x1, y1, 1],
+                              [x2, y2, 1],
+                              [x3, y3, 1]])
+            mat_B = np.array([z1, z2, z3])
+            mat_X = np.linalg.solve(mat_A, mat_B)
+            z_int[i, j] = mat_X[0] * x_int[i, j] + mat_X[1] * y_int[i, j] + mat_X[2]
 
     return z_int
 
-# def interp_spline(x_obs, y_obs, z_obs, x_int, y_int, p=1):
-    # d = np.zeros((len(x_obs), len(x_obs)))
-    # mat_A = np.zeros((len(x_obs) +3, len(x_obs) +3))
-    # mat_B = np.zeros((len(x_obs) +3, 1))
-    # mat_A[:len(x_obs), 0] = 1
-    # mat_A[:len(x_obs), 1] = [i[0] for i in x_obs.tolist()]
-    # mat_A[:len(x_obs), 2] = [i[0] for i in y_obs.tolist()]
-    # mat_A[len(x_obs):len(x_obs)+1, 3:] = 1
-    # mat_A[len(x_obs)+1:len(x_obs)+2, 3:] = [i[0] for i in x_obs.tolist()]
-    # mat_A[len(x_obs)+2:len(x_obs)+3, 3:] = [i[0] for i in y_obs.tolist()]
-    #
-    # T = np.dot(mat_A[0: len(x_obs), 3:len(x_obs)],
-    #
-    #
-    # for i in np.arange(0,x_int.shape[0]):
-    #     for j in np.arange(0,x_int.shape[1]):
-    #         d[i,j] = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)[0]
-    #         nb_or = d[i,j]**2 * np.log(d[i,j])
 
+def interp_spline(x_obs, y_obs, z_obs, x_int, y_int, p=1):
+
+    n = len(x_obs)  # Nombre de points d'observation
+
+    # Construction de la matrice A
+    mat_A = np.zeros((n + 3, n + 3))
+
+    # Remplissage de la partie supérieure gauche de la matrice A
+    for i in range(n):
+        for j in range(n):
+            r = np.sqrt((x_obs[i] - x_obs[j]) ** 2 + (y_obs[i] - y_obs[j]) ** 2)
+            if r == 0:
+                mat_A[i, j] = 0
+            else:
+                mat_A[i, j] = r ** 2 * np.log(r)  # Fonction de base radiale
+
+    # Remplissage des termes linéaires
+    mat_A[:n, n] = 1
+    mat_A[:n, n + 1] = x_obs.flatten()
+    mat_A[:n, n + 2] = y_obs.flatten()
+
+    # Remplissage des contraintes
+    mat_A[n, :n] = 1
+    mat_A[n + 1, :n] = x_obs.flatten()
+    mat_A[n + 2, :n] = y_obs.flatten()
+
+    # Construction du vecteur B
+    mat_B = np.zeros((n + 3, 1))
+    mat_B[:n, 0] = z_obs.flatten()
+
+    # Résolution du système linéaire
+    coeffs = np.linalg.solve(mat_A, mat_B)
+
+    # Interpolation sur la grille
+    z_int = np.zeros_like(x_int)
+    for i in range(x_int.shape[0]):
+        for j in range(x_int.shape[1]):
+            # Calcul des distances entre le point d'interpolation et les points d'observation
+            r = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)
+            r[r == 0] = 1e-10  # Éviter les divisions par zéro
+
+            # Calcul de la valeur interpolée
+            z_int[i, j] = coeffs[n, 0] + coeffs[n + 1, 0] * x_int[i, j] + coeffs[n + 2, 0] * y_int[i, j]
+            z_int[i, j] += np.sum(coeffs[:n, 0] * (r ** 2 * np.log(r)))
+
+    return z_int
 
 def interp_ppv(x_obs, y_obs, z_obs, x_int, y_int):
     # Interpolation par plus proche voisin
@@ -87,7 +107,7 @@ def interp_ppv(x_obs, y_obs, z_obs, x_int, y_int):
     # [np.array dimension 1*n]
     # x_int, y_int, positions pour lesquelles on souhaite interpoler une valeur z_int
     # [np array dimension m*p]
-    
+
     z_int = np.nan*np.zeros(x_int.shape)
     for i in np.arange(0,x_int.shape[0]):
         for j in np.arange(0,x_int.shape[1]):
@@ -96,20 +116,20 @@ def interp_ppv(x_obs, y_obs, z_obs, x_int, y_int):
             z_int[i,j] = z_obs[idx]
     return z_int
 
-def inter_inv_dist(x_obs, y_obs, z_obs, x_int, y_int, p=2,nb_pts=-1):
+
+def inter_inv_dist(x_obs, y_obs, z_obs, x_int, y_int, p=2, nb_pts=-1):
     z_int = np.nan * np.zeros(x_int.shape)
     # d = np.zeros((x_obs.shape,1))
     for i in np.arange(0, x_int.shape[0]):
         for j in np.arange(0, x_int.shape[1]):
             d = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)
-            idx = np.argsort(d,axis=0)
+            idx = np.argsort(d, axis=0)
             if nb_pts > 0: idx = idx[:nb_pts]
-            z_int[i, j] = (np.sum(z_obs[idx,0] / d[idx,0]**p) / np.sum(1 / d[idx,0]**p))
-    return  z_int
-
-
-
-#
+            if d[i] == 0:
+                z_int[i, j] = z_obs[i]
+            else:
+                z_int[i, j] = (np.sum(z_obs[idx, 0] / d[idx, 0] ** p) / np.sum(1 / d[idx, 0] ** p))
+    return z_int
 
 
 
@@ -123,7 +143,7 @@ def plot_contour_2d(x_grd ,y_grd ,z_grd, x_obs = np.array([]) ,y_obs = np.array(
     # xlabel, ylabel : étiquettes des axes (facultatif)
     # title : titre (facultatif)
     # fileo : nom du fichier d'enregistrement de la figure (facultatif)
-    
+
     z_grd_m = np.ma.masked_invalid(z_grd)
     fig = plt.figure()
     plt.contour(x_grd, y_grd, z_grd_m, int(np.round((np.max(z_grd_m)-np.min(z_grd_m))/4)),colors ='k')
@@ -191,7 +211,7 @@ def plot_points(x_obs, y_obs, xlabel = "", ylabel = "", title = "", fileo = ""):
     # xlabel, ylabel : étiquettes des axes (facultatif)
     # title : titre (facultatif)
     # fileo : nom du fichier d'enregistrement de la figure (facultatif)
-    
+
     fig = plt.figure()
     ax = plt.gca()
     plt.plot(x_obs, y_obs, 'ok', ms = 4)
@@ -219,7 +239,7 @@ def plot_patch(x_obs, y_obs, z_obs, fig = "", minmax = [0,0], xlabel = "", ylabe
     # s : taille du marker
     # ec : couleur du contour des marker
     # lw : taille du contour des marker
-    
+
     if fig == "": fig = plt.figure()
     if minmax[0] < minmax[-1]:
       p=plt.scatter(x_obs, y_obs, marker = marker, c = z_obs, s = s, cmap=cmap, vmin = minmax[0], \
@@ -250,7 +270,7 @@ def plot_triangulation(x_obs, y_obs, xlabel = "", ylabel = "", title = "", fileo
     # fileo : nom du fichier d'enregistrement de la figure (facultatif)
     from scipy.spatial import Delaunay as delaunay
     tri = delaunay(np.hstack((x_obs,y_obs)))
-    
+
     plt.figure()
     plt.triplot(x_obs[:,0], y_obs[:,0], tri.simplices)
     plt.plot(x_obs, y_obs, 'or', ms=4)
@@ -358,27 +378,69 @@ def calc_va_ana(h_exp, c, a=0, model="cub"):
         return gamma_lin
 
 def interp_krg(x_obs, y_obs, z_obs, x_int, y_int, c, a=0, kind_var="cub", r_maw_var=160, card_var=500):
-    mat_A = np.zeros((x_obs.shape[0] + 1,x_obs.shape[0] + 1))
-    mat_B = np.zeros((x_obs.shape[0] + 1,1))
-    temps = []
-    for i in np.arange(0, x_obs.shape[0]):
-        for j in np.arange(0, x_obs.shape[0]):
-            d1 = np.sqrt((x_obs[i,0] - x_obs[j,0]) ** 2 + (y_obs[i,0] - y_obs[j,0]) ** 2)
-            mat_A[j,i] = calc_va_ana(d1, c, a, model="cub")
-            temps.append(d1)
+    n = x_obs.shape[0]
+    mat_A = np.zeros((n + 1, n + 1))
+    mat_B = np.zeros((n + 1, 1))
 
-    for i in np.arange(0, x_int.shape[0]):
-        for j in np.arange(0, x_int.shape[1]):
-            d2 = np.sqrt((x_int[i, j] - x_obs[i]) ** 2 + (y_int[i, j] - y_obs[i]) ** 2)
-            mat_B[i,0] = calc_va_ana(d2[0], c, a, model="cub")
+    # Remplir la matrice A avec les valeurs du variogramme
+    for i in range(n):
+        for j in range(n):
+            d = np.sqrt((x_obs[i, 0] - x_obs[j, 0]) ** 2 + (y_obs[i, 0] - y_obs[j, 0]) ** 2)
+            mat_A[i, j] = calc_va_ana(d, c, a, model=kind_var)
+
+    # Ajouter la contrainte de Lagrange
+    mat_A[:-1, -1] = 1
+    mat_A[-1, :-1] = 1
+    mat_A[-1, -1] = 0
+    z_int = np.nan * np.zeros(x_int.shape)
+
+    for i in range(x_int.shape[0]):
+        for j in range(x_int.shape[1]):
+            # Remplir la matrice B avec les valeurs du variogramme pour le point (x_int[i,j], y_int[i,j])
+            d = np.sqrt((x_int[i, j] - x_obs[:, 0]) ** 2 + (y_int[i, j] - y_obs[:, 0]) ** 2)
+            mat_B[:-1, 0] = calc_va_ana(d, c, a, model=kind_var)
+            mat_B[-1, 0] = 1  # Contrainte de Lagrange
+
+            # Résolution du système linéaire pour obtenir les poids lambda
+            lambda_vec = np.linalg.solve(mat_A, mat_B)
+
+            z_int[i, j] = np.sum(lambda_vec[:-1] * z_obs)
+
+    return z_int
+
+
+def cross_validation(x_obs, y_obs, v_obs, method="lineaire", parametre=None):
+    dim = len(x_obs)
+    resultats = []
+    # Création de la liste originale des points
+    set_points = np.hstack((x_obs, y_obs, v_obs))
+    for i in range(dim):
+        # Réinitialiser la liste des points à chaque itération
+        points = set_points.copy()
+        # Sélection du point à exclure : Point dont la valeur doit être interpolée
+        point_search = points[i]
+        # Suppression du point i
+        points = np.delete(points, i, axis=0)
 
 
 
-    print(mat_B)
-    mat_A[len(x_obs),:-1] = 1
-    mat_A[:-1,len(x_obs)] = 1
+        # Interpolation de la valeur v au point.
+        if method == "lineaire":
+            v_interp = interp_lin(points[:, 0], points[:, 1], points[:, 2], point_search[0], point_search[1])
+            # residu
+            res = point_search[3] - v_interp
+            resultats.append(res)
+    return resultats
 
-    return mat_B
+
+
+
+
+
+
+
+
+
 
 
 
