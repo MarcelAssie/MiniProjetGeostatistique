@@ -299,7 +299,7 @@ def calc_nuee(x_obs, y_obs, z_obs,):
     return h_raw, g_raw
 
 
-def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500):
+def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500, pas=30):
     g_raw = []
     h_raw = []
     for i in np.arange(x_obs.shape[0]):
@@ -311,8 +311,6 @@ def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500):
 
     g_raw = np.array(g_raw)
     h_raw = np.array(h_raw)
-
-    pas = 20
 
 
     h = np.arange(0, hmax, pas)
