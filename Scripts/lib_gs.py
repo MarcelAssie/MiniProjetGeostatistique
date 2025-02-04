@@ -328,13 +328,13 @@ def fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"):
     y = C * (7 * (h**2 / a**2) -(35/4)*(h**3 / a**3) + (7/2)*(h**5 / a**5) -(3/4)*(h/a)**7)
     if model == "cub":
 
-        mat_A = np.zeros((x_obs.shape[0],2))
-        mat_B = np.zeros((x_obs.shape[0],1))
+        mat_A = np.zeros((len(h_raw),2))
+        mat_B = np.zeros((len(h_raw),1))
         diff_C = sp.diff(y, C)
         diff_a = sp.diff(y, a)
         dc, da = float('inf'), float('inf')
         C0, a0 = float(g_raw.max()), float(h_raw[np.argmax(g_raw)])
-        while dc > 0.1 or da > 0.1:
+        while abs(dc) > 0.1 or abs(da) > 0.1:
             for i in range(len(h_raw)):
                 if h_raw[i] <= a0 :
 
