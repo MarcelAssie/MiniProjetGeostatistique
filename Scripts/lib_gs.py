@@ -362,6 +362,7 @@ def fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"):
             dc, da = mat_X[0, 0], mat_X[1, 0]
             C0 += dc
             a0 += da
+
         return  float(C0), float(a0)
     else:
         mat_A = h_raw
