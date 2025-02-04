@@ -23,7 +23,6 @@ x_obs = obs_mf[:,0:1]/1e3 # km
 y_obs = obs_mf[:,1:2]/1e3 # km
 z_obs = obs_mf[:,2:3]
 
-
 ## Sorties du champ "vent en rafale" de la réanalyse ERA5
 obs_era5 = np.loadtxt(f"{path}mod_wind_era5.txt")
 E_era5 = obs_era5[:, 0:1] / 1e3  # km
@@ -66,38 +65,39 @@ z_grd_lin = gs.interp_lin(x_obs, y_obs, z_obs, x_grd, y_grd)
 # print("La valeur interpolée en (225,180) est "+str(zi))
 # # plt.show()
 
-# h_raw, g_raw = gs.calc_nuee(x_obs, y_obs, z_obs)
-# plt.plot(h_raw,g_raw,'.')
-# plt.xlabel(r'$h_{i,j}$')
-# plt.ylabel(r'$\Delta z_{i,j}^2/2$')
-# plt.grid()
-#
+h_raw, g_raw = gs.calc_nuee(x_obs, y_obs, z_obs)
+plt.plot(h_raw,g_raw,'.')
+plt.xlabel(r'$h_{i,j}$')
+plt.ylabel(r'$\Delta z_{i,j}^2/2$')
+plt.grid()
+plt.show()
 
 
 h_exp, g_exp = gs.calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500)
-# plt.plot(h_raw,g_raw,'.',label='Nuéee')
-# plt.plot(h_exp,g_exp,'r',label='Var. exp.')
-# plt.xlabel(r'$h$')
-# plt.ylabel(r'$\Delta z_i^2/2$')
-# plt.legend()
-# plt.grid()
-
-c,a = gs.fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub")
-gamma_cub = gs.calc_va_ana(h_exp, c=c, a=a, model="cub")
-print("Paramètres du variogramme cubique:",a,c)
-c = gs.fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="lin")
-gamma_lin = gs.calc_va_ana(h_exp, c=c,model="lin")
-print("Paramètre du variogramme linéaire:",c)
+plt.plot(h_raw,g_raw,'.',label='Nuéee')
 plt.plot(h_exp,g_exp,'r',label='Var. exp.')
-plt.plot(h_exp,gamma_cub,'g',label=r'$\gamma_{cub}$')
-plt.plot(h_exp,gamma_lin,'b',label=r'$\gamma_{lin}$')
 plt.xlabel(r'$h$')
 plt.ylabel(r'$\Delta z_i^2/2$')
 plt.legend()
 plt.grid()
-
-
 plt.show()
+
+# c,a = gs.fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub")
+# gamma_cub = gs.calc_va_ana(h_exp, c=c, a=a, model="cub")
+# print("Paramètres du variogramme cubique:",a,c)
+# c = gs.fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="lin")
+# gamma_lin = gs.calc_va_ana(h_exp, c=c,model="lin")
+# print("Paramètre du variogramme linéaire:",c)
+# plt.plot(h_exp,g_exp,'r',label='Var. exp.')
+# plt.plot(h_exp,gamma_cub,'g',label=r'$\gamma_{cub}$')
+# plt.plot(h_exp,gamma_lin,'b',label=r'$\gamma_{lin}$')
+# plt.xlabel(r'$h$')
+# plt.ylabel(r'$\Delta z_i^2/2$')
+# plt.legend()
+# plt.grid()
+#
+#
+# plt.show()
 
 # print(gs.fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"))
 #

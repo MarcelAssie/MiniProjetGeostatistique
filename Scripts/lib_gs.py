@@ -299,7 +299,7 @@ def calc_nuee(x_obs, y_obs, z_obs,):
     return h_raw, g_raw
 
 
-def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500, pas=30):
+def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500, pas=20):
     g_raw = []
     h_raw = []
     for i in np.arange(x_obs.shape[0]):
@@ -319,7 +319,6 @@ def calc_var_exp(x_obs,y_obs,z_obs,hmax=160,nmax=500, pas=30):
         mask =  (h_raw >= h[k]) & (h_raw < h[k]+pas)
         g[k] = np.mean(g_raw[mask])
 
-
     return h, g
 
 def fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"):
@@ -333,8 +332,8 @@ def fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"):
         diff_C = sp.diff(y, C)
         diff_a = sp.diff(y, a)
         dc, da = float('inf'), float('inf')
-        C0, a0 = float(g_raw.max()), float(h_raw[np.argmax(g_raw)])
-        while dc > 0.1 or da > 0.1:
+        C0, a0 = g_raw.max(), h_raw[np.argmax(g_raw)]
+        while abs(dc) > 0.1 or abs(da) > 0.1:
             for i in range(len(h_raw)):
                 if h_raw[i] <= a0 :
 
@@ -354,9 +353,15 @@ def fit_var_ana(x_obs,y_obs,z_obs,hmax=160,nmax = 500,model="cub"):
 
             mat_N = mat_A.T@mat_A
             mat_K = mat_A.T@mat_B
-            mat_X = np.linalg.inv(mat_N)@mat_K
-            dc, da = mat_X[0, 0], mat_X[1,0]
-            C0, a0 = dc + C0, da + a0
+            try:
+                mat_X = np.linalg.solve(mat_N, mat_K)
+            except np.linalg.LinAlgError:
+                return None  # Retourne None en cas de problème d'inversion
+            # mat_X = np.linalg.inv(mat_N)@mat_K
+            # Mise à jour des paramètres
+            dc, da = mat_X[0, 0], mat_X[1, 0]
+            C0 += dc
+            a0 += da
         return  float(C0), float(a0)
     else:
         mat_A = h_raw
@@ -407,7 +412,7 @@ def interp_krg(x_obs, y_obs, z_obs, x_int, y_int, c, a=0, kind_var="cub", r_maw_
     return z_int
 
 
-def cross_validation(x_obs, y_obs, v_obs, method="lin", parametre=None):
+def cross_validation(x_obs, y_obs, v_obs, method="lineaire", parametre=None):
     dim = len(x_obs)
     resultats = []
     # Création de la liste originale des points
@@ -423,7 +428,7 @@ def cross_validation(x_obs, y_obs, v_obs, method="lin", parametre=None):
 
 
         # Interpolation de la valeur v au point.
-        if method == "lin":
+        if method == "lineaire":
             v_interp = interp_lin(points[:, 0], points[:, 1], points[:, 2], point_search[0], point_search[1])
             # residu
             res = point_search[3] - v_interp
