@@ -54,50 +54,47 @@ def interp_lin(x_obs, y_obs, z_obs, x_int, y_int):
     return z_int
 
 
-def interp_spline(x_obs, y_obs, z_obs, x_int, y_int, p=1):
-
-    n = len(x_obs)  # Nombre de points d'observation
+def interp_spline(x_obs, y_obs, z_obs, x_int, y_int, rho=0):
+    n = len(x_obs)
 
     # Construction de la matrice A
-    mat_A = np.zeros((n + 3, n + 3))
+    A = np.zeros((n + 3, n + 3))
 
-    # Remplissage de la partie supérieure gauche de la matrice A
+    # Remplissage de la matrice A
+    A[:n, 0] = 1
+    A[:n, 1] = x_obs.flatten()
+    A[:n, 2] = y_obs.flatten()
+
     for i in range(n):
         for j in range(n):
             r = np.sqrt((x_obs[i] - x_obs[j]) ** 2 + (y_obs[i] - y_obs[j]) ** 2)
-            if r == 0:
-                mat_A[i, j] = 0
-            else:
-                mat_A[i, j] = r ** 2 * np.log(r)  # Fonction de base radiale
+            if i == j :
+                A[i, j + 3] = rho
+            else :
+                r * np.log(r + 1e-10)
+    A[n, 3:] = 1
+    A[n + 1, 3:] = x_obs.flatten()
+    A[n + 2, 3:] = y_obs.flatten()
 
-    # Remplissage des termes linéaires
-    mat_A[:n, n] = 1
-    mat_A[:n, n + 1] = x_obs.flatten()
-    mat_A[:n, n + 2] = y_obs.flatten()
+    # Construction et remplissage de la matrice B
+    B = np.zeros(n + 3)
+    B[:n] = z_obs.flatten()
 
-    # Remplissage des contraintes
-    mat_A[n, :n] = 1
-    mat_A[n + 1, :n] = x_obs.flatten()
-    mat_A[n + 2, :n] = y_obs.flatten()
 
-    # Construction du vecteur B
-    mat_B = np.zeros((n + 3, 1))
-    mat_B[:n, 0] = z_obs.flatten()
-
-    # Résolution du système linéaire
-    coeffs = np.linalg.solve(mat_A, mat_B)
+    # Résolution du système
+    mat_N = A.T @ A
+    mat_K = A.T @ B
+    mat_C = np.linalg.inv(mat_N) @ mat_K
+    # mat_C = np.linalg.solve(A, B)
 
     # Interpolation sur la grille
     z_int = np.zeros_like(x_int)
     for i in range(x_int.shape[0]):
         for j in range(x_int.shape[1]):
-            # Calcul des distances entre le point d'interpolation et les points d'observation
-            r = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)
-            r[r == 0] = 1e-10  # Éviter les divisions par zéro
-
-            # Calcul de la valeur interpolée
-            z_int[i, j] = coeffs[n, 0] + coeffs[n + 1, 0] * x_int[i, j] + coeffs[n + 2, 0] * y_int[i, j]
-            z_int[i, j] += np.sum(coeffs[:n, 0] * (r ** 2 * np.log(r)))
+            x = x_int[i, j]
+            y = y_int[i, j]
+            r = np.sqrt((x - x_obs) ** 2 + (y - y_obs) ** 2)
+            z_int[i, j] = (mat_C[0] + mat_C[1] * x + mat_C[2] * y + np.sum(mat_C[3:] * r * np.log(r + 1e-10)))
 
     return z_int
 
@@ -117,21 +114,50 @@ def interp_ppv(x_obs, y_obs, z_obs, x_int, y_int):
     return z_int
 
 
-def inter_inv_dist(x_obs, y_obs, z_obs, x_int, y_int, p=2, nb_pts=-1):
-    z_int = np.nan * np.zeros(x_int.shape)
-    # d = np.zeros((x_obs.shape,1))
-    for i in np.arange(0, x_int.shape[0]):
-        for j in np.arange(0, x_int.shape[1]):
-            d = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)
-            idx = np.argsort(d, axis=0)
-            if nb_pts > 0: idx = idx[:nb_pts]
-            if d[i] == 0:
-                z_int[i, j] = z_obs[i]
+# def inter_inv_dist(x_obs, y_obs, z_obs, x_int, y_int, p=2, nb_pts=-1):
+#     z_int = np.nan * np.zeros(x_int.shape)
+#     # d = np.zeros((x_obs.shape,1))
+#     for i in np.arange(0, x_int.shape[0]):
+#         for j in np.arange(0, x_int.shape[1]):
+#             d = np.sqrt((x_int[i, j] - x_obs) ** 2 + (y_int[i, j] - y_obs) ** 2)
+#             idx = np.argsort(d, axis=0)
+#             if nb_pts > 0: idx = idx[:nb_pts]
+#             if d[i] == 0:
+#                 z_int[i, j] = z_obs[i]
+#             else:
+#                 z_int[i, j] = (np.sum(z_obs[idx, 0] / d[idx, 0] ** p) / np.sum(1 / d[idx, 0] ** p))
+#     return z_int
+
+
+def interp_inv(x_obs, y_obs, z_obs, x_grd, y_grd, p=2, dmax=None):
+    z_grd = np.full(x_grd.shape, np.nan)  # Initialisation avec NaN
+
+    for i in range(x_grd.shape[0]):
+        for j in range(x_grd.shape[1]):
+            # Coordonnées du point de la grille
+            x, y = x_grd[i, j], y_grd[i, j]
+
+            # Calcul des distances aux points d'observation
+            distances = np.sqrt((x_obs - x) ** 2 + (y_obs - y) ** 2)
+
+            # Filtrer les points selon la distance maximale si définie
+            if dmax is not None:
+                mask = distances <= dmax
+                distances = distances[mask]
+                values = z_obs[mask]
             else:
-                z_int[i, j] = (np.sum(z_obs[idx, 0] / d[idx, 0] ** p) / np.sum(1 / d[idx, 0] ** p))
-    return z_int
+                values = z_obs
 
+            # Éviter les divisions par zéro
+            if len(distances) == 0 or np.any(distances == 0):
+                z_grd[i, j] = z_obs[np.argmin(distances)] if np.any(distances == 0) else np.nan
+                continue
 
+            # Calcul de la pondération
+            weights = 1 / distances ** p
+            z_grd[i, j] = np.sum(weights * values) / np.sum(weights)
+
+    return z_grd
 
 
 ############################# Visualisation ############################
@@ -386,11 +412,14 @@ def interp_krg(x_obs, y_obs, z_obs, x_int, y_int, c, a=0, kind_var="cub", r_maw_
             d = np.sqrt((x_obs[i, 0] - x_obs[j, 0]) ** 2 + (y_obs[i, 0] - y_obs[j, 0]) ** 2)
             mat_A[i, j] = calc_va_ana(d, c, a, model=kind_var)
 
-    # Ajouter la contrainte de Lagrange
     mat_A[:-1, -1] = 1
     mat_A[-1, :-1] = 1
     mat_A[-1, -1] = 0
+
+
+
     z_int = np.nan * np.zeros(x_int.shape)
+    sigma = np.nan * np.zeros(x_int.shape)
 
     for i in range(x_int.shape[0]):
         for j in range(x_int.shape[1]):
@@ -402,33 +431,15 @@ def interp_krg(x_obs, y_obs, z_obs, x_int, y_int, c, a=0, kind_var="cub", r_maw_
             # Résolution du système linéaire pour obtenir les poids lambda
             lambda_vec = np.linalg.solve(mat_A, mat_B)
 
+            # Calcul de la valeur interpolée
             z_int[i, j] = np.sum(lambda_vec[:-1] * z_obs)
 
-    return z_int
+            # Calcul de l'incertitude σ²(s)
+            sigma[i, j] = np.sum(lambda_vec[:-1] * mat_B[:-1, 0]) + lambda_vec[-1]
+
+    return z_int, sigma
 
 
-def cross_validation(x_obs, y_obs, v_obs, method="lin", parametre=None):
-    dim = len(x_obs)
-    resultats = []
-    # Création de la liste originale des points
-    set_points = np.hstack((x_obs, y_obs, v_obs))
-    for i in range(dim):
-        # Réinitialiser la liste des points à chaque itération
-        points = set_points.copy()
-        # Sélection du point à exclure : Point dont la valeur doit être interpolée
-        point_search = points[i]
-        # Suppression du point i
-        points = np.delete(points, i, axis=0)
-
-
-
-        # Interpolation de la valeur v au point.
-        if method == "lin":
-            v_interp = interp_lin(points[:, 0], points[:, 1], points[:, 2], point_search[0], point_search[1])
-            # residu
-            res = point_search[3] - v_interp
-            resultats.append(res)
-    return resultats
 
 
 
